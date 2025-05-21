@@ -24,3 +24,5 @@ venv/
 # pytest coverage output
 .coverage
 htmlcov/
+
+data
