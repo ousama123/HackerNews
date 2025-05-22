@@ -16,6 +16,12 @@ def get_item_url(item_id):
     return f"{base_url}/{item_id}.json"
 
 
+def get_user_url(username):
+    """Generate the URL for fetching a specific user."""
+    base_url = "https://hacker-news.firebaseio.com/v0/user"
+    return f"{base_url}/{username}.json"
+
+
 # TODO add other endpoints later
 def get_top_stories_url():
     """Generate the URL for fetching top stories."""
@@ -28,22 +34,26 @@ async def fetch_json(session, url):
         return await response.json()
 
 
-async def get_top_stories(limit=10):
+async def get_top_stories(limit=None):
     """Get IDs of top stories."""
     async with aiohttp.ClientSession() as session:
         story_ids = await fetch_json(session, get_top_stories_url())
+        if limit is None:
+            return story_ids  # Return ALL stories
         return story_ids[:limit]
 
 
 # TODO check different max_depth
-async def get_hn_content(story_ids, max_depth=2):
+async def get_hn_content(story_ids, max_depth=5):
     """Build content structure from stories and comments."""
     stories = []
     comments = []
+    users = []
     seen_ids = set()
+    seen_users = set()
 
-    # Queue format: (item_id, depth, parent_id)
-    queue = [(id, 0, None) for id in story_ids]
+    # Queue format: (item_id, depth, parent_id, story_id)
+    queue = [(id, 0, None, id) for id in story_ids]
 
     async with aiohttp.ClientSession() as session:
         while queue:
@@ -52,9 +62,11 @@ async def get_hn_content(story_ids, max_depth=2):
 
             # Get items we haven't seen yet
             new_ids = []
-            for item_id, _, _ in current_batch:
+            batch_info = {}
+            for item_id, depth, parent_id, story_id in current_batch:
                 if item_id not in seen_ids:
                     new_ids.append(item_id)
+                    batch_info[item_id] = (depth, parent_id, story_id)
 
             if not new_ids:
                 continue
@@ -67,128 +79,88 @@ async def get_hn_content(story_ids, max_depth=2):
 
             items = await asyncio.gather(*fetch_tasks)
 
+            # Collect usernames for batch fetching
+            usernames_to_fetch = []
+
             # Process each item
             for item_id, item in zip(new_ids, items):
                 if not item or item_id in seen_ids:
                     continue
 
                 seen_ids.add(item_id)
-                # Find the corresponding batch item information
-                batch_ids = []
-                for i in current_batch:
-                    batch_ids.append(i[0])
-                item_index = batch_ids.index(item_id)
-                item_info = current_batch[item_index]
+                depth, parent_id, story_id = batch_info[item_id]
 
-                depth = item_info[1]
-                parent_id = item_info[2]
+                # Collect username for fetching
+                username = item.get("by", "")
+                if username and username not in seen_users:
+                    usernames_to_fetch.append(username)
+                    seen_users.add(username)
 
-                # Handle different item types
-                # TODO check if there is a better approach to build the data structure
+                # Handle different item types - keep pure API data
+                # TODO study the data more to check if there is
+                # another way to build the data structure
                 if item.get("type") == "story":
-                    # Create story data dictionary
-                    story = {}
-                    story["id"] = item_id
-                    story["title"] = item.get("title", "")
-                    story["url"] = item.get("url", "")
-                    story["text"] = item.get("text", "")
-                    story["by"] = item.get("by", "")
-                    story["time"] = item.get("time", 0)
-                    story["score"] = item.get("score", 0)
-                    story["kids"] = item.get("kids", [])
-                    stories.append(story)
+                    # Store exactly what API returns
+                    stories.append(dict(item))
 
                 elif item.get("type") == "comment":
-                    # Create comment data dictionary
-                    comment = {}
-                    comment["id"] = item_id
-                    comment["story_id"] = story_ids[0]
-                    comment["parent_id"] = parent_id
-                    comment["by"] = item.get("by", "")
-                    comment["text"] = item.get("text", "")
-                    comment["time"] = item.get("time", 0)
-                    comment["depth"] = max(0, depth - 1)
-                    comment["kids"] = item.get("kids", [])
-                    comments.append(comment)
+                    # Store exactly what API returns
+                    comments.append(dict(item))
 
                 # Add children to queue if we haven't reached max depth
                 if depth < max_depth and item.get("kids"):
                     kid_ids = item.get("kids", [])
                     for kid_id in kid_ids:
-                        queue.append((kid_id, depth + 1, item_id))
+                        queue.append((kid_id, depth + 1, item_id, story_id))
 
-    return {"stories": stories, "comments": comments}
+            # Fetch users in batch
+            if usernames_to_fetch:
+                user_fetch_tasks = []
+                for username in usernames_to_fetch:
+                    user_url = get_user_url(username)
+                    user_fetch_tasks.append(fetch_json(session, user_url))
+
+                user_data = await asyncio.gather(*user_fetch_tasks)
+
+                # Process user data - capture ALL fields automatically
+                for username, user in zip(usernames_to_fetch, user_data):
+                    if user:
+                        # Start with all fields from API response
+                        user_record = dict(user)
+                        users.append(user_record)
+
+    return {"stories": stories, "comments": comments, "users": users}
 
 
 async def main():
     """Main function to fetch and save Hacker News data."""
-    # Create data directory
+
     data_dir = "data"
     os.makedirs(data_dir, exist_ok=True)
 
-    # TODO move to .env or .secrets
     # TODO rename based on the endpoint (To categorize files)
-    output_path = data_dir
-    output_file = os.path.join(output_path, "topstories.json")
+    output_file = os.path.join(data_dir, "topstories.json")
 
-    # Variables for tracking data
-    existing_stories = []
-    existing_comments = []
-    existing_story_ids = set()
+    # Always fetch fresh data (no loading existing data)
+    print("Fetching fresh top stories...")
 
-    # Load existing data if available
-    if os.path.exists(output_file):
-        with open(output_file, "r", encoding="utf-8") as f:
-            existing_data = json.load(f)
-            existing_stories = existing_data.get("stories", [])
-            existing_comments = existing_data.get("comments", [])
-
-            # Extract existing story IDs for comparison
-            for story in existing_stories:
-                existing_story_ids.add(story["id"])
-
-    # Get new stories
-    # TODO check if limit=None would cause problems
+    # Get current top stories
     top_story_ids = await get_top_stories(limit=10)
 
-    # Find new stories that we don't already have
-    new_story_ids = []
-    for story_id in top_story_ids:
-        if story_id not in existing_story_ids:
-            new_story_ids.append(story_id)
+    # Get content for all stories (fresh fetch every time)
+    data = await get_hn_content(top_story_ids)
 
-    if new_story_ids:
-        # Get content for new stories
-        new_data = await get_hn_content(new_story_ids)
+    # Always save new data (overwrites existing file)
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-        # Combine with existing data
-        # TODO check if more data is needed for the data structure
-        all_stories = existing_stories + new_data["stories"]
-        all_comments = existing_comments + new_data["comments"]
-
-        # Save combined data
-        output_data = {"stories": all_stories, "comments": all_comments}
-
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=2)
-
-        # Output statistics
-        new_story_count = len(new_data["stories"])
-        new_comment_count = len(new_data["comments"])
-        msg_1 = f"Added {new_story_count} new stories"
-        msg_2 = f"and {new_comment_count} comments"
-        print(f"{msg_1} {msg_2}")
-    else:
-        print("No new stories to add")
-
-    # Calculate total story count
-    if new_story_ids:
-        new_count = len(new_story_ids)
-    else:
-        new_count = 0
-
-    story_count = len(existing_stories) + new_count
-    print(f"Data file now has {story_count} stories")
+    story_count = len(data["stories"])
+    comment_count = len(data["comments"])
+    user_count = len(data["users"])
+    print(
+        f"Saved {story_count} stories, {comment_count} comments, and {user_count} users"
+    )
+    print(f"Data saved to: {output_file}")
 
 
 if __name__ == "__main__":
