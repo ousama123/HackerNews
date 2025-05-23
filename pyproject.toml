@@ -6,7 +6,7 @@ authors = [
     {name = "Oussama Anadani",email = "anadani@student.chalmers.se"}
 ]
 readme = "README.md"
-requires-python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
+requires-python = ">=3.9,!=3.9.7,<4.0"
 dependencies = [
     "pytest (>=8.3.5,<9.0.0)",
     "streamlit (>=1.45.1,<2.0.0)",
