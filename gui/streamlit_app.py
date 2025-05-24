@@ -1,13 +1,17 @@
 import streamlit as st
 
+from src.rag import run_rag
+
 st.set_page_config(page_title="HackerNews RAG", page_icon="🔎")
 
 st.title("🔎 HackerNews RAG Search")
 
-st.write("Backend not implemented yet. Stay tuned!")
+st.write("Ask a question about HackerNews data:")
 
 with st.form("search_form"):
-    query = st.text_input("Enter your query:", disabled=True)
+    query = st.text_input("Enter your query:")
     submit = st.form_submit_button("Search")
-    if submit:
-        st.info("Backend not implemented yet.")
+    if submit and query:
+        with st.spinner("Searching..."):
+            answer = run_rag(query)
+        st.success(answer)

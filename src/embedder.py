@@ -1,16 +1,17 @@
 import os
 
 from dotenv import find_dotenv, load_dotenv
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_ollama import OllamaEmbeddings
 
+# Load environment variables from .env file
 load_dotenv(find_dotenv())
 
 # TODO test some other OS embedders
-EMBED_MODEL_NAME = os.getenv("EMBED_MODEL_NAME")
+OLLAMA_EMBED_MODEL_NAME = os.getenv("EMBED_MODEL_NAME", "nomic-embed-text")
 
 
-def get_embedding_model() -> HuggingFaceEmbeddings:
+def get_embedding_model():
     """
-    Initialize open-source sentence-transformer embedding model.
+    Initialize and return an OllamaEmbeddings client for local Ollama embedding models.
     """
-    return HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
+    return OllamaEmbeddings(model=OLLAMA_EMBED_MODEL_NAME)

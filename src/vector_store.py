@@ -1,6 +1,6 @@
 from langchain_community.vectorstores import Chroma
 
-from embedder import get_embedding_model
+from src.embedder import get_embedding_model
 
 
 def build_vector_store(chunks: list) -> Chroma:

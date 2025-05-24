@@ -135,7 +135,7 @@ async def get_hn_content(story_ids, max_depth=5):
 async def main():
     """Main function to fetch and save Hacker News data."""
 
-    data_dir = "data"
+    data_dir = "src/data"
     os.makedirs(data_dir, exist_ok=True)
 
     # TODO rename based on the endpoint (To categorize files)
