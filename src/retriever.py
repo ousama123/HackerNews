@@ -5,8 +5,8 @@ from dotenv import find_dotenv, load_dotenv
 from src.loader import load_document, split_documents
 from src.vector_store import build_vector_store
 
-# Load environment variables
-load_dotenv(find_dotenv())
+# Load environment variables (force override existing env vars)
+load_dotenv(find_dotenv(), override=True)
 
 # Get data path from environment variables
 DATA_PATH = os.getenv("DATA_PATH", "src/data/topstories_simple.txt")

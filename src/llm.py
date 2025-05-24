@@ -8,7 +8,6 @@ load_dotenv(find_dotenv())
 
 # TODO test some other models
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME")
-
 print("Loading Ollama model:", LLM_MODEL_NAME)
 
 
@@ -19,8 +18,8 @@ def get_llm():
     return OllamaLLM(
         model=LLM_MODEL_NAME,
         temperature=0.1,
-        max_tokens=512,
+        max_tokens=1024,
         top_p=0.95,
         top_k=40,
-        stop=["\n\n", "\n", "###", "```", "```python", "```json"],
+        stop=["###", "```"],
     )
