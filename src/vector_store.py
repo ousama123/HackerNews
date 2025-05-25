@@ -30,9 +30,7 @@ def build_vector_store(chunks):
     embeddings = get_embedding_model()
     vector_db_path = get_vector_db_path()
 
-    vectordb = Chroma.from_documents(
-        documents=chunks, embedding=embeddings, persist_directory=vector_db_path
-    )
+    vectordb = Chroma.from_documents(documents=chunks, embedding=embeddings, persist_directory=vector_db_path)
 
     print(f"Built vector database with {len(chunks)} chunks")
     return vectordb
@@ -56,10 +54,7 @@ def add_new_chunks_to_vector_store(new_chunks):
     first_new_id = new_ids[0]
     print(f"Validating ID {first_new_id}...")
     check_result = vectordb._collection.get(ids=[first_new_id])
-    print(
-        f"Found {len(check_result['documents'])} existing documents for "
-        f"ID {first_new_id}"
-    )
+    print(f"Found {len(check_result['documents'])} existing documents for ID {first_new_id}")
     # Add documents with specific IDs
     vectordb.add_documents(new_chunks, ids=new_ids)  # Check the addition worked
     new_count = vectordb._collection.count()
@@ -68,10 +63,7 @@ def add_new_chunks_to_vector_store(new_chunks):
 
     # Verify the first new document was added
     verify_result = vectordb._collection.get(ids=[first_new_id])
-    print(
-        f"Confirmed: ID {first_new_id} contains "
-        f"{len(verify_result['documents'])} documents"
-    )
+    print(f"Confirmed: ID {first_new_id} contains {len(verify_result['documents'])} documents")
 
     return vectordb
 

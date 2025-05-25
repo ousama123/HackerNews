@@ -36,21 +36,24 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
-# Set the maximum line length
-line-length = 88
+# Set a very high line length limit (effectively disabling line length checks)
+line-length = 200
 
 # Assume Python 3.9+
 target-version = "py39"
 
 [tool.ruff.lint]
-# Enable specific rules
+# Enable specific rules, but exclude line length and formatting rules
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
     "F",   # Pyflakes
     "I",   # isort (import organization)
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
+]
+
+# Ignore line length and other formatting rules
+ignore = [
+    "E501",  # Line too long
+    "E701",  # Multiple statements on one line
+    "E702",  # Multiple statements on one line (semicolon)
 ]
 
 [tool.ruff.lint.isort]

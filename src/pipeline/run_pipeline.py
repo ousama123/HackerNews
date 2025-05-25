@@ -79,9 +79,7 @@ def main():
         # Get the output file path
         current_file = os.path.abspath(__file__)
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-        output_file = os.path.join(
-            project_root, "src", "data", "hackernews_optimized.txt"
-        )
+        output_file = os.path.join(project_root, "src", "data", "hackernews_optimized.txt")
 
         # Check if we should append or create new file
         if os.path.exists(output_file) and vector_store_exists():
