@@ -4,7 +4,8 @@ from langchain.prompts import PromptTemplate
 prompt_template = PromptTemplate(
     input_variables=["context", "question"],
     template="""
-You are a HackerNews analyst. Answer the question concisely based on the provided context.
+You are a HackerNews analyst. Answer the question concisely based on the provided
+context.
 
 Guidelines:
 - Keep answers short and focused

@@ -10,19 +10,42 @@ if platform.system() == "Windows":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
+def get_project_data_path():
+    """Get the absolute path to the project's data directory."""
+    # Find the project root by looking for pyproject.toml
+    current_file = os.path.abspath(__file__)
+    current_dir = os.path.dirname(current_file)
+
+    # Walk up the directory tree until we find pyproject.toml
+    while current_dir != os.path.dirname(current_dir):  # Stop at filesystem root
+        if os.path.exists(os.path.join(current_dir, "pyproject.toml")):
+            project_root = current_dir
+            break
+        current_dir = os.path.dirname(current_dir)
+    else:
+        # Fallback: assume we're in src/ and go up levels
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+
+    data_path = os.path.join(project_root, "src", "data")
+    return data_path
+
+
 def load_processed_ids():
     """Load IDs we've already processed."""
-    ids_file = "src/data/processed_ids.json"
+    data_dir = get_project_data_path()
+    ids_file = os.path.join(data_dir, "processed_ids.json")
     if os.path.exists(ids_file):
-        with open(ids_file, "r") as f:
+        with open(ids_file) as f:
             return set(json.load(f))
     return set()
 
 
 def save_processed_ids(processed_ids):
     """Save processed IDs to file."""
-    os.makedirs("src/data", exist_ok=True)
-    with open("src/data/processed_ids.json", "w") as f:
+    data_dir = get_project_data_path()
+    os.makedirs(data_dir, exist_ok=True)
+    ids_file = os.path.join(data_dir, "processed_ids.json")
+    with open(ids_file, "w") as f:
         json.dump(list(processed_ids), f, indent=2)
 
 
@@ -279,8 +302,11 @@ async def get_comments_with_metadata(
                 )
 
 
+# TODO keep the levl low for now , but allow higher levels in the future
 def fetch_hackernews_data(stories_per_category=3, max_comments=2):
-    """Fetch only NEW HackerNews data from ALL endpoints that we haven't processed before."""
+    """
+    Fetch only NEW HackerNews data from ALL endpoints that we haven't processed before.
+    """
 
     async def _fetch():
         processed_ids = load_processed_ids()
@@ -289,15 +315,14 @@ def fetch_hackernews_data(stories_per_category=3, max_comments=2):
         all_story_ids = await get_all_stories(stories_per_category)
 
         new_story_ids_by_category = {}
-        total_new_stories = 0
-
-        # Filter out already processed stories
+        total_new_stories = 0  # Filter out already processed stories
         for category, story_ids in all_story_ids.items():
             new_ids = [sid for sid in story_ids if sid not in processed_ids]
             new_story_ids_by_category[category] = new_ids
             total_new_stories += len(new_ids)
             print(
-                f"  {category}: {len(new_ids)} new stories (out of {len(story_ids)} total)"
+                f"  {category}: {len(new_ids)} new stories "
+                f"(out of {len(story_ids)} total)"
             )
 
         print(f"Found {total_new_stories} total new stories across all categories")
@@ -308,12 +333,8 @@ def fetch_hackernews_data(stories_per_category=3, max_comments=2):
 
         data = await get_hn_content_with_metadata(
             new_story_ids_by_category, processed_ids, max_depth=max_comments
-        )
-
-        # Save raw data with metadata
-        current_file = os.path.abspath(__file__)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-        data_dir = os.path.join(project_root, "src", "data")
+        )  # Save raw data with metadata
+        data_dir = get_project_data_path()
         os.makedirs(data_dir, exist_ok=True)
         raw_file = os.path.join(data_dir, "hackernews_raw.json")
 
@@ -356,9 +377,7 @@ if __name__ == "__main__":
     print(" Enhanced HackerNews Fetcher - Testing All Endpoints")
     print("=" * 60)
 
-    current_file = os.path.abspath(__file__)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-    data_dir = os.path.join(project_root, "src", "data")
+    data_dir = get_project_data_path()
     os.makedirs(data_dir, exist_ok=True)
     output_file = os.path.join(data_dir, "enhanced_hackernews_data.json")
 
@@ -367,7 +386,7 @@ if __name__ == "__main__":
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump({"items": items}, f, indent=2)
 
-    print(f"💾 Saved {len(items)} items to {output_file}")
+    print(f" Saved {len(items)} items to {output_file}")
 
     if items:
         categories = {}

@@ -209,12 +209,13 @@ def save_preprocessed_data(items, output_file=None, append_mode=False):
 
     doc_start_num = 1
     if append_mode and os.path.exists(output_file):
-        with open(output_file, "r", encoding="utf-8") as f:
+        with open(output_file, encoding="utf-8") as f:
             content = f.read()
             existing_docs = content.count("DOCUMENT ")
             doc_start_num = existing_docs + 1
         print(
-            f"Appending {len(documents)} new documents starting from document {doc_start_num}"
+            f"Appending {len(documents)} new documents starting from "
+            f"document {doc_start_num}"
         )
 
     file_mode = "a" if append_mode else "w"

@@ -10,7 +10,7 @@ def load_document(path: str) -> list[Document]:
     """
     Load a local text file and wrap its contents in a Document.
     """
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         text = f.read()
     return [Document(page_content=text, metadata={"source": path})]
 
