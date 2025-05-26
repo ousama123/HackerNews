@@ -1,29 +1,17 @@
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = 800  # TODO: test different chunk sizes for optimal retrieval
+CHUNK_OVERLAP = 80  # TODO: play with chunk overlap for better context
 
 
-# TODO test different loader later
 def load_document(path: str) -> list[Document]:
-    """
-    Load a local text file and wrap its contents in a Document.
-    """
+    """Load local text file as Document"""
     with open(path, encoding="utf-8") as f:
-        text = f.read()
-    return [Document(page_content=text, metadata={"source": path})]
+        return [Document(page_content=f.read(), metadata={"source": path})]
 
 
-# TODO test different textsplitter
-# TODO play with chunk size and chunk overlap
 def split_documents(docs: list[Document]) -> list[Document]:
-    """
-    Split documents into chunks for embedding and retrieval.
-    """
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        length_function=len,
-    )
-    return splitter.split_documents(docs)
+    """Split documents into chunks for embedding and retrieval"""
+    # TODO: test different text splitters for HackerNews content
+    return RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP, length_function=len).split_documents(docs)

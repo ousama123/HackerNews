@@ -1,17 +1,6 @@
 """
-HackerNews Data Fetcher
-
-Fetches data from HackerNews API endpoints for RAG processing.
-Handles stories, comments, and user profiles with rate limiting and duplicate tracking.
-
-Features:
-- Multi-endpoint fetching (top, new, best, ask, show, jobs)
-- Recursive comment fetching with depth limits
-- User profile collection for authors and commenters
-- Incremental updates with processed ID tracking
-- Async operations for efficient API usage
-
-Flow: Load IDs → Fetch stories → Get comments → Collect users → Save JSON
+HackerNews Data Fetcher - Compact Version
+Fetches data from HackerNews API with batching, caching, and concurrent processing.
 """
 
 import asyncio
@@ -21,64 +10,60 @@ import platform
 
 import aiohttp
 
-# Windows-specific event loop policy for compatibility
+# Windows-specific asyncio fix for event loop policy issues
 if platform.system() == "Windows":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+# Configuration
+STORIES_PER_CATEGORY = 5
+MAX_COMMENT_DEPTH = 3
+MAX_TOP_COMMENTS = 5
+MAX_CHILD_COMMENTS = 3
+BATCH_SIZE = 10  # Batch size for concurrent API requests
+
 
 def get_project_data_path():
-    """
-    Locate the project's data directory by searching for pyproject.toml.
-
-    Traverses up the directory tree from the current file location to find
-    the project root (indicated by pyproject.toml), then returns the data path.
-
-    Returns:
-        str: Absolute path to the src/data directory
-
-    Search Strategy:
-        1. Start from current file's directory
-        2. Move up directories until finding pyproject.toml
-        3. Return {project_root}/src/data path
-        4. Falls back to relative path calculation if not found
-    """
-    current_file = os.path.abspath(__file__)
-    current_dir = os.path.dirname(current_file)
+    """Find project data directory by locating pyproject.toml (robust path resolution)"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
     while current_dir != os.path.dirname(current_dir):
         if os.path.exists(os.path.join(current_dir, "pyproject.toml")):
             return os.path.join(current_dir, "src", "data")
         current_dir = os.path.dirname(current_dir)
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_file))), "src", "data")
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "src", "data")
 
 
 def load_processed_ids():
-    """Load previously processed HackerNews item IDs to avoid duplicates."""
-    data_dir = get_project_data_path()
-    ids_file = os.path.join(data_dir, "processed_ids.json")
-    if os.path.exists(ids_file):
-        with open(ids_file) as f:
-            return set(json.load(f))  # Convert list back to set for fast lookups
-    return set()  # Return empty set if no previous runs
+    """Load previously processed IDs"""
+    ids_file = os.path.join(get_project_data_path(), "processed_ids.json")
+    return set(json.load(open(ids_file))) if os.path.exists(ids_file) else set()
 
 
 def save_processed_ids(processed_ids):
-    """Save updated set of processed item IDs to disk for incremental updates."""
+    """Save processed IDs to disk"""
     data_dir = get_project_data_path()
-    os.makedirs(data_dir, exist_ok=True)  # Create directory if needed
-    ids_file = os.path.join(data_dir, "processed_ids.json")
-    with open(ids_file, "w") as f:
-        json.dump(list(processed_ids), f, indent=2)  # Convert set to list for JSON
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, "processed_ids.json"), "w") as f:
+        json.dump(list(processed_ids), f, indent=2)
 
 
 async def fetch_json(session, url):
-    """Fetch JSON data from a URL using an aiohttp session."""
+    """Fetch JSON from URL"""
     async with session.get(url) as response:
-        return await response.json()  # Parse and return JSON response
+        return await response.json()
 
 
-async def get_stories_by_category(session, category, limit=10):
-    """Fetch story IDs from a specific HackerNews category endpoint."""
-    # Map category names to API endpoints
+async def get_item(session, item_id):
+    """Fetch HackerNews item by ID"""
+    return await fetch_json(session, f"https://hacker-news.firebaseio.com/v0/item/{item_id}.json")
+
+
+async def get_user(session, username):
+    """Fetch HackerNews user profile"""
+    return await fetch_json(session, f"https://hacker-news.firebaseio.com/v0/user/{username}.json")
+
+
+async def get_all_stories(stories_per_category=STORIES_PER_CATEGORY):
+    """Fetch story IDs from all HN endpoints"""
     endpoints = {
         "topstories": "https://hacker-news.firebaseio.com/v0/topstories.json",
         "newstories": "https://hacker-news.firebaseio.com/v0/newstories.json",
@@ -87,217 +72,143 @@ async def get_stories_by_category(session, category, limit=10):
         "showstories": "https://hacker-news.firebaseio.com/v0/showstories.json",
         "jobstories": "https://hacker-news.firebaseio.com/v0/jobstories.json",
     }
-
-    # Return empty list for unknown categories
-    if category not in endpoints:
-        return []
-
-    # Fetch story IDs and apply limit if specified
-    story_ids = await fetch_json(session, endpoints[category])
-    return story_ids[:limit] if limit else story_ids
-
-
-async def get_all_stories(stories_per_category=5):
-    """
-    Fetch story IDs from all HackerNews category endpoints.
-
-    Args:
-        stories_per_category (int): Number of stories per category
-
-    Returns:
-        dict: Category names mapped to story ID lists
-    """
     results = {}
-    # Define all HackerNews category endpoints
-    categories = ["topstories", "newstories", "beststories", "askstories", "showstories", "jobstories"]
-
     async with aiohttp.ClientSession() as session:
-        for category in categories:
+        for category, url in endpoints.items():
             try:
-                # Fetch story IDs for each category with limit
-                story_ids = await get_stories_by_category(session, category, stories_per_category)
-                results[category] = story_ids
-                print(f" {category}: {len(story_ids)} stories")
+                story_ids = await fetch_json(session, url)
+                results[category] = story_ids[:stories_per_category]
+                print(f" {category}: {len(results[category])} stories")
             except Exception as e:
-                # Continue with other categories if one fails
                 print(f" Error fetching {category}: {e}")
                 results[category] = []
     return results
 
 
-async def get_item(session, item_id):
-    """
-    Fetch a specific HackerNews item by its ID.
-
-    Args:
-        session (aiohttp.ClientSession): Active HTTP session
-        item_id (int): Unique HackerNews item ID
-
-    Returns:
-        dict: Item data with fields like id, type, by, time, text, kids, etc.
-    """
-    url = f"https://hacker-news.firebaseio.com/v0/item/{item_id}.json"
-    return await fetch_json(session, url)
-
-
-async def get_user(session, username):
-    """
-    Fetch a HackerNews user profile by username.
-
-    Args:
-        session (aiohttp.ClientSession): Active HTTP session
-        username (str): HackerNews username
-
-    Returns:
-        dict: User profile data with id, karma, created, about, etc.
-    """
-    url = f"https://hacker-news.firebaseio.com/v0/user/{username}.json"
-    return await fetch_json(session, url)
+async def fetch_batch(session, ids_or_names, fetch_func, item_type, batch_size=BATCH_SIZE):
+    """Generic batch fetcher with concurrency and rate limiting"""
+    all_results = []
+    for i in range(0, len(ids_or_names), batch_size):
+        batch_data = ids_or_names[i : i + batch_size]
+        # Create concurrent tasks for batch processing
+        tasks = [fetch_func(session, item) for item in batch_data]
+        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+        valid_results = [r for r in batch_results if r and not isinstance(r, Exception)]
+        all_results.extend(valid_results)
+        print(f"  Fetched batch of {len(valid_results)}/{len(batch_data)} {item_type}")
+    return all_results
 
 
 async def get_comments_with_metadata(session, comment_ids, comments, users, seen_items, seen_users, processed_ids, depth, max_depth, parent_category):
-    """
-    Recursively fetch comments and their authors with enhanced metadata.
-
-    Args:
-        session: HTTP session
-        comment_ids: List of comment IDs to fetch
-        comments: List to append comments to (modified in-place)
-        users: List to append user profiles to (modified in-place)
-        seen_items: Set of processed item IDs (modified in-place)
-        seen_users: Set of processed usernames (modified in-place)
-        processed_ids: Set of globally processed IDs to skip
-        depth: Current recursion depth
-        max_depth: Maximum depth to traverse
-        parent_category: Category of parent story for metadata
-    """
-    # Stop recursion at maximum depth to prevent excessive API calls
-    if depth >= max_depth:
+    """Recursively fetch comments and authors with batching and depth control"""
+    if depth >= max_depth or not comment_ids:
         return
 
-    for comment_id in comment_ids:
-        # Skip already processed comments to avoid duplicates
-        if comment_id in seen_items or comment_id in processed_ids:
-            continue
+    # Skip already processed items to avoid duplicates
+    new_comment_ids = [cid for cid in comment_ids if cid not in seen_items and cid not in processed_ids]
+    if not new_comment_ids:
+        return
 
-        # Fetch comment data from HackerNews API
-        comment = await get_item(session, comment_id)
+    print(f"    Fetching {len(new_comment_ids)} comments at depth {depth} in batches...")
+    batch_comments = await fetch_batch(session, new_comment_ids, get_item, "items")
+
+    comment_authors, child_comment_ids = [], []
+    for comment in batch_comments:
         if comment and comment.get("type") == "comment":
-            # Add metadata for RAG context enrichment
-            comment["hn_category"] = parent_category
-            comment["hn_context"] = f"comment_on_{parent_category}_story"
-            comment["hn_depth"] = depth
+            # Add metadata for better categorization and retrieval
+            comment.update({"hn_category": parent_category, "hn_context": f"comment_on_{parent_category}_story", "hn_depth": depth})
             comments.append(comment)
-            seen_items.add(comment_id)
+            seen_items.add(comment["id"])
 
-            # Fetch commenter profile for additional context
-            author = comment.get("by")
-            if author and author not in seen_users:
-                user = await get_user(session, author)
-                if user:
-                    # Add role-based context to user profile
-                    user["hn_context"] = f"commenter_on_{parent_category}"
-                    users.append(user)
-                    seen_users.add(author)
+            if (author := comment.get("by")) and author not in seen_users:
+                comment_authors.append(author)
+                seen_users.add(author)
 
-            # Recursively fetch child comments (limited to first 3)
+            # Recursive comment fetching with depth and count limits
             if comment.get("kids") and depth < max_depth - 1:
-                await get_comments_with_metadata(session, comment["kids"][:3], comments, users, seen_items, seen_users, processed_ids, depth + 1, max_depth, parent_category)
+                child_comment_ids.extend(comment["kids"][:MAX_CHILD_COMMENTS])
+
+    if comment_authors:
+        print(f"    Fetching {len(comment_authors)} commenter profiles in batches...")
+        for user in await fetch_batch(session, comment_authors, get_user, "user profiles"):
+            if user:
+                user["hn_context"] = f"commenter_on_{parent_category}"
+                users.append(user)
+
+    if child_comment_ids and depth < max_depth - 1:
+        await get_comments_with_metadata(session, child_comment_ids, comments, users, seen_items, seen_users, processed_ids, depth + 1, max_depth, parent_category)
 
 
-async def get_hn_content_with_metadata(story_ids_by_category, processed_ids, max_depth=3):
-    """
-    Fetch comprehensive HackerNews content with enhanced metadata.
-
-    Args:
-        story_ids_by_category (dict): Category names mapped to story ID lists
-        processed_ids (set): Set of already processed item IDs to skip
-        max_depth (int): Maximum comment tree depth to traverse
-
-    Returns:
-        dict: Contains "stories", "comments", and "users" lists with metadata
-    """
-    # Initialize collections for different content types
+async def get_hn_content_with_metadata(story_ids_by_category, processed_ids, max_depth=MAX_COMMENT_DEPTH):
+    """Fetch comprehensive HN content with metadata"""
     stories, comments, users, seen_items, seen_users = [], [], [], set(), set()
 
     async with aiohttp.ClientSession() as session:
         for category, story_ids in story_ids_by_category.items():
             print(f"Processing {category}: {len(story_ids)} stories")
-            for story_id in story_ids:
-                # Skip already processed stories for incremental updates
-                if story_id in processed_ids:
-                    continue
+            new_story_ids = [sid for sid in story_ids if sid not in processed_ids]
+            if not new_story_ids:
+                print(f"  All {len(story_ids)} stories already processed")
+                continue
 
-                # Fetch full story data from HackerNews API
-                story = await get_item(session, story_id)
+            print(f"  Fetching {len(new_story_ids)} new stories in batches...")
+            batch_stories = await fetch_batch(session, new_story_ids, get_item, "items")
+
+            story_authors, all_comment_ids = [], []
+            for story in batch_stories:
                 if story and story.get("type") == "story":
-                    # Add category metadata for RAG context
-                    story["hn_category"] = category
-                    story["hn_endpoint"] = category
+                    story.update({"hn_category": category, "hn_endpoint": category})
                     stories.append(story)
-                    seen_items.add(story_id)
+                    seen_items.add(story["id"])
 
-                    # Fetch story author profile with context
-                    author = story.get("by")
-                    if author and author not in seen_users:
-                        user = await get_user(session, author)
-                        if user:
-                            # Add role-based context to author profile
-                            user["hn_context"] = f"author_of_{category}_story"
-                            users.append(user)
-                            seen_users.add(author)
+                    if (author := story.get("by")) and author not in seen_users:
+                        story_authors.append(author)
+                        seen_users.add(author)
 
-                    # Fetch top-level comments (limited to first 5 for relevance)
                     if story.get("kids"):
-                        await get_comments_with_metadata(session, story["kids"][:5], comments, users, seen_items, seen_users, processed_ids, 0, max_depth, category)
+                        all_comment_ids.extend(story["kids"][:MAX_TOP_COMMENTS])
+
+            if story_authors:
+                print(f"  Fetching {len(story_authors)} author profiles in batches...")
+                for user in await fetch_batch(session, story_authors, get_user, "user profiles"):
+                    if user:
+                        user["hn_context"] = f"author_of_{category}_story"
+                        users.append(user)
+
+            if all_comment_ids:
+                await get_comments_with_metadata(session, all_comment_ids, comments, users, seen_items, seen_users, processed_ids, 0, max_depth, category)
 
     return {"stories": stories, "comments": comments, "users": users}
 
 
-def fetch_hackernews_data(stories_per_category=3, max_comments=2):
-    """
-    Main entry point for fetching fresh HackerNews data across all endpoints.
-
-    Args:
-        stories_per_category (int): Number of stories to fetch from each category
-        max_comments (int): Maximum depth to traverse in comment trees
-
-    Returns:
-        list: List of all newly fetched items (stories, comments, users)
-    """
+def fetch_hackernews_data(stories_per_category=STORIES_PER_CATEGORY, max_comments=MAX_COMMENT_DEPTH):
+    """Main entry point for fetching HN data"""
 
     async def _fetch():
-        # Load tracking data for incremental updates
         processed_ids = load_processed_ids()
         print(f"Already processed {len(processed_ids)} items")
 
-        # Fetch story IDs from all HackerNews endpoints
         all_story_ids = await get_all_stories(stories_per_category)
-
-        # Filter out already processed stories to avoid duplicates
         new_story_ids_by_category = {}
         total_new_stories = 0
+
         for category, story_ids in all_story_ids.items():
-            # Identify new stories not in processed set
             new_ids = [sid for sid in story_ids if sid not in processed_ids]
             new_story_ids_by_category[category] = new_ids
             total_new_stories += len(new_ids)
-            print(f"  {category}: {len(new_ids)} new stories (out of {len(story_ids)} total)")
+            print(f"  {category}: {len(new_ids)} new stories, {len(story_ids) - len(new_ids)} already processed")
 
-        print(f"Found {total_new_stories} total new stories across all categories")
+        print(f"Summary: {total_new_stories} new stories")
         if total_new_stories == 0:
             print("No new stories to process - everything is up to date!")
             return []
 
-        # Fetch comprehensive content with metadata for new stories only
         data = await get_hn_content_with_metadata(new_story_ids_by_category, processed_ids, max_depth=max_comments)
 
-        # Prepare data directory and file paths
+        # Save files
         data_dir = get_project_data_path()
         os.makedirs(data_dir, exist_ok=True)
-        raw_file = os.path.join(data_dir, "hackernews_raw.json")
 
-        # Add comprehensive fetch metadata for tracking and debugging
         data["fetch_metadata"] = {
             "endpoints_used": list(all_story_ids.keys()),
             "stories_per_category": stories_per_category,
@@ -308,25 +219,19 @@ def fetch_hackernews_data(stories_per_category=3, max_comments=2):
             "fetch_timestamp": asyncio.get_event_loop().time(),
         }
 
-        # Save raw JSON data for preprocessing pipeline
-        with open(raw_file, "w", encoding="utf-8") as f:
+        with open(os.path.join(data_dir, "hackernews_raw.json"), "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        print(f"Raw data with metadata saved to: {raw_file}")
+        print("Raw data saved")
 
-        # Flatten all new items for return value and ID tracking
-        new_items = []
-        new_items.extend(data["stories"])
-        new_items.extend(data["comments"])
-        new_items.extend(data["users"])
-
-        # Update processed IDs tracking with all newly fetched items
-        new_ids = set()
-        for item in new_items:
-            if item and item.get("id"):
-                new_ids.add(item["id"])
+        # Track new IDs and save items
+        new_items = data["stories"] + data["comments"] + data["users"]
+        new_ids = {item["id"] for item in new_items if item and item.get("id")}
         processed_ids.update(new_ids)
         save_processed_ids(processed_ids)
-        print(f"Added {len(new_ids)} new IDs to tracking (total: {len(processed_ids)})")
+
+        with open(os.path.join(data_dir, "enhanced_hackernews_data.json"), "w", encoding="utf-8") as f:
+            json.dump({"items": new_items}, f, indent=2)
+        print(f"Saved {len(new_items)} items (total tracked: {len(processed_ids)})")
 
         return new_items
 
@@ -334,34 +239,15 @@ def fetch_hackernews_data(stories_per_category=3, max_comments=2):
 
 
 if __name__ == "__main__":
-    """
-    MAin entry point for testing the enhanced HackerNews data fetcher separately.
-    """
-    print("Enhanced HackerNews Fetcher - Testing All Endpoints")
-    print("=" * 60)
-
-    # Ensure data directory exists for output files
-    data_dir = get_project_data_path()
-    os.makedirs(data_dir, exist_ok=True)
-    output_file = os.path.join(data_dir, "enhanced_hackernews_data.json")
-
-    # Execute main fetching workflow with test parameters
-    items = fetch_hackernews_data(stories_per_category=3, max_comments=2)
-
-    # Save test results for inspection and debugging
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump({"items": items}, f, indent=2)
-    print(f"Saved {len(items)} items to {output_file}")
-
-    # Display summary of fetched content by category
-    if items:
+    print("Enhanced HackerNews Fetcher - Testing")
+    print("=" * 40)
+    new_items = fetch_hackernews_data(stories_per_category=3, max_comments=2)
+    if new_items:
         categories = {}
-        for item in items:
+        for item in new_items:
             if item.get("hn_category"):
-                category = item["hn_category"]
-                categories[category] = categories.get(category, 0) + 1
-        print("\nContent Categories Collected:")
+                categories[item["hn_category"]] = categories.get(item["hn_category"], 0) + 1
+        print("\nContent Categories:")
         for category, count in categories.items():
             print(f"  {category}: {count} items")
-
-    print("\nEnhanced fetching test complete!")
+    print("\nTest complete!")
