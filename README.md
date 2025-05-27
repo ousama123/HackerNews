@@ -11,7 +11,7 @@ Ask questions about HackerNews content using AI. Fetches real HN data and runs e
 
 2. **Setup Project**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/ousama123/HackerNews.git
    cd HackerNews
    pip install poetry
    poetry install
