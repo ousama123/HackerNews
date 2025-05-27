@@ -43,10 +43,10 @@ The system automatically tracks what it has already processed, so you can run th
 
 ## Troubleshooting
 
-**Ollama errors**: Make sure Ollama is running and try `ollama list`
-**"No module" errors**: Use `poetry run` before Python commands
-**Slow responses**: Normal on CPU (10-30s), try smaller model: `ollama pull llama3.2:1b`
-**No data**: Run pipeline first: `poetry run python src/pipeline/run_pipeline.py`
+- **Ollama errors**: Make sure Ollama is running and try `ollama list`
+- **"No module" errors**: Use `poetry run` before Python commands
+- **Slow responses**: Normal on CPU (10-30s), try smaller model: `ollama pull llama3.2:1b`
+- **No data**: Run pipeline first: `poetry run python src/pipeline/run_pipeline.py`
 
 
 ## Tech Stack
