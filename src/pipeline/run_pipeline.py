@@ -1,28 +1,31 @@
 """HackerNews RAG Pipeline"""
 
 import os
+import traceback
 
 from langchain_core.documents import Document
 
-from src.data_analysis import preprocess
-from src.data_analysis.fetcher import fetch_hackernews_data
+from src.data_analysis.extract import Extracter
+from src.data_analysis.load import Loader
+from src.data_analysis.transform import Transformer
 from src.loader import load_document, split_documents
 from src.vector_store import add_new_chunks_to_vector_store, build_vector_store, vector_store_exists
 
 
-def get_new_chunks_only(new_items, output_file):
+def get_new_chunks_only(new_items):
     """Process new items into document chunks for incremental updates"""
     print(f"Processing {len(new_items)} new items...")
     temp_docs = []
+    transformer = Transformer()
 
     for item in new_items:
         if not item or not (item_type := item.get("type", "")):
             continue
 
         # Process stories and comments into formatted text documents
-        if item_type == "story" and (doc_text := preprocess.format_story(item)):
+        if item_type == "story" and (doc_text := transformer.format_story(item)):
             temp_docs.append((doc_text, item))
-        elif item_type == "comment" and (doc_text := preprocess.format_comment(item)):
+        elif item_type == "comment" and (doc_text := transformer.format_comment(item)):
             temp_docs.append((doc_text, item))
 
     if not temp_docs:
@@ -56,7 +59,8 @@ def main():
         print("Fetching new data from HackerNews...")
         # Configuration: 10 stories per category, max 5 comment levels deep
         # Adjust these parameters based on processing capacity and data needs
-        new_items = fetch_hackernews_data(stories_per_category=10, max_comments=5)
+        extracter = Extracter(stories_per_category=10, max_comment_depth=5)
+        new_items = extracter.fetch_hackernews_data()
 
         if not new_items:
             print("No new data found - everything is up to date")
@@ -69,10 +73,12 @@ def main():
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
         output_file = os.path.join(project_root, "src", "data", "hackernews_optimized.txt")
 
+        loader = Loader()
+
         # Determine processing strategy: incremental update vs full rebuild
         if os.path.exists(output_file) and vector_store_exists():
             print("Incremental update - adding to existing data...")
-            preprocess.append_preprocessed_data(new_items, output_file)
+            loader.append_preprocessed_data(new_items, output_file)
             print("Converting new items to chunks...")
             new_chunks = get_new_chunks_only(new_items, output_file)
             print("Adding new chunks to vector database...")
@@ -80,7 +86,7 @@ def main():
         else:
             # Full rebuild when no existing data or vector store
             print("Building new database from scratch...")
-            preprocess.save_preprocessed_data(new_items, output_file)
+            loader.save_preprocessed_data(new_items, output_file)
             print("Creating vector database...")
             chunks = split_documents(load_document(output_file))
             build_vector_store(chunks)
@@ -90,8 +96,6 @@ def main():
 
     except Exception as e:
         print(f"Pipeline error: {e}")
-        import traceback
-
         traceback.print_exc()
         return False
 
