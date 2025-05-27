@@ -40,7 +40,6 @@ poetry run python src/pipeline/run_pipeline.py
 ```
 The system automatically tracks what it has already processed, so you can run this anytime to get new content.
 
-**Need more data?** Edit `src/data_analysis/fetcher.py` to increase `stories_per_category` and `max_comments` limits.
 
 ## Troubleshooting
 
@@ -49,10 +48,6 @@ The system automatically tracks what it has already processed, so you can run th
 **Slow responses**: Normal on CPU (10-30s), try smaller model: `ollama pull llama3.2:1b`
 **No data**: Run pipeline first: `poetry run python src/pipeline/run_pipeline.py`
 
-## Update Data
-```bash
-poetry run python src/pipeline/run_pipeline.py  # Gets new HN content
-```
 
 ## Tech Stack
 - **AI**: Ollama (Llama 3.2) + Sentence Transformers
