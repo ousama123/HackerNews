@@ -198,9 +198,6 @@ class Extracter:
                 new_ids = {item["id"] for item in new_items if item and item.get("id")}
                 processed_ids.update(new_ids)
                 self.save_processed_ids(processed_ids)
-
-                with open(os.path.join(data_dir, "enhanced_hackernews_data.json"), "w", encoding="utf-8") as f:
-                    json.dump({"items": new_items}, f, indent=2)
                 print(f"Saved {len(new_items)} items (total tracked: {len(processed_ids)})")
 
                 return new_items

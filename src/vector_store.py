@@ -1,11 +1,8 @@
-"""HackerNews Vector Store Management"""
-
 import os
 
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 from src.embedder import get_embedding_model
-from src.loader import load_document, split_documents
 
 
 def get_vector_db_path():
@@ -30,16 +27,13 @@ def add_new_chunks_to_vector_store(new_chunks):
         return load_vector_store()
 
     vectordb = load_vector_store()
+    print("before count...")
     current_count = vectordb._collection.count()  # Get current count to prevent ID conflicts
+    print("after count...")
     print(f"Vector database has {current_count} chunks")
     # Create sequential IDs starting from current count to avoid conflicts
     vectordb.add_documents(new_chunks, ids=[str(current_count + i) for i in range(len(new_chunks))])
     return vectordb
-
-
-def get_chunks_from_new_documents(output_file, num_new_items):
-    """Get document chunks from processed file (legacy utility function)"""
-    return split_documents(load_document(output_file))
 
 
 def load_vector_store():

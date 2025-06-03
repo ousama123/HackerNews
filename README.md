@@ -5,9 +5,19 @@ Ask questions about HackerNews content using AI. Fetches real HN data and runs e
 ## Quick Start
 
 1. **Install Ollama** (local AI): Download from [ollama.com](https://ollama.com)
+   LLM model: 
    ```bash
    ollama pull llama3.2
    ```
+   Embedding model:
+   ```bash
+   ollama pull nomic-embed-text
+   ```
+   After pulling the models, run 
+   ```bash 
+   ollama list
+   ``` 
+   This should list both models
 
 2. **Setup Project**
    ```bash
@@ -15,11 +25,12 @@ Ask questions about HackerNews content using AI. Fetches real HN data and runs e
    cd HackerNews
    pip install poetry
    poetry install
+   OBS: You need python installed before running poetry install
    ```
 
 3. **Get Data & Start**
    ```bash
-   poetry run python src/pipeline/run_pipeline.py  # Fetch HN data (2-3 min)
+   poetry run python src/pipeline/run_pipeline.py  # Fetch HN data
    poetry run streamlit run app/streamlit_app.py   # Start web app
    ```
 

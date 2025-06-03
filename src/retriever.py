@@ -4,7 +4,7 @@ import os
 
 from dotenv import find_dotenv, load_dotenv
 
-from src.loader import load_document, split_documents
+from src.document_splitter import load_document, split_documents
 from src.vector_store import build_vector_store, load_vector_store, vector_store_exists
 
 load_dotenv(find_dotenv(), override=True)

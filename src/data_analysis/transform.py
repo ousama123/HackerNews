@@ -6,6 +6,7 @@ Extracts, cleans and formats stories, comments and users.
 import html
 import re
 from datetime import datetime
+from langchain_core.documents import Document
 
 
 class Transformer:
@@ -161,3 +162,41 @@ class Transformer:
             tags.append("active_commenter")
         parts.append(f"Tags: {', '.join(tags)}")
         return "\n".join(parts)
+
+
+    def process_new_items_to_chunks(self, new_items, split_documents_func):
+            """Process new items into document chunks for incremental updates"""
+            print(f"Processing {len(new_items)} new items...")
+            temp_docs = []
+
+            for item in new_items:
+                if not item or not (item_type := item.get("type", "")):
+                    continue
+
+                # Process stories and comments into formatted text documents
+                if item_type == "story" and (doc_text := self.format_story(item)):
+                    temp_docs.append((doc_text, item))
+                elif item_type == "comment" and (doc_text := self.format_comment(item)):
+                    temp_docs.append((doc_text, item))
+
+            if not temp_docs:
+                print("No valid documents found in new items")
+                return []
+
+            # Create LangChain Documents with comprehensive metadata for better retrieval
+            documents = [
+                Document(
+                    page_content=doc_text,
+                    metadata={
+                        "source": "hackernews.com",
+                        "item_id": item.get("id", "unknown"),
+                        "item_type": item.get("type", "unknown"),
+                        "author": item.get("by", "unknown"),
+                    },
+                )
+                for doc_text, item in temp_docs
+            ]
+
+            chunks = split_documents_func(documents)
+            print(f"Created {len(chunks)} chunks from {len(new_items)} items")
+            return chunks
