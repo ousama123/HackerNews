@@ -23,7 +23,7 @@ def get_retriever():
     if vector_store_exists():
         print("Loading existing vector database...")
         vectordb = load_vector_store()
-        print(f"Loaded {vectordb._collection.count()} chunks from database")
+        print(f"Loaded {vectordb.index.ntotal} chunks from database")
     else:
         print("No vector database found, building from scratch...")
         chunks = split_documents(load_document(DATA_PATH))
