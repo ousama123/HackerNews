@@ -62,6 +62,6 @@ The system automatically tracks what it has already processed, so you can run th
 
 ## Tech Stack
 - **AI**: Ollama (Llama 3.2) + Sentence Transformers
-- **Database**: ChromaDB for vector search
+- **Database**: FAISS for vector search
 - **Framework**: LangChain + Streamlit
 - **Data**: HackerNews API
