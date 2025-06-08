@@ -178,6 +178,8 @@ class Transformer:
                     temp_docs.append((doc_text, item))
                 elif item_type == "comment" and (doc_text := self.format_comment(item)):
                     temp_docs.append((doc_text, item))
+                elif item_type == "user" and (doc_text := self.format_user(item)):
+                    temp_docs.append((doc_text, item))
 
             if not temp_docs:
                 print("No valid documents found in new items")

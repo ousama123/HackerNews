@@ -12,9 +12,7 @@ def get_llm():
     """Initialize OllamaLLM client with optimized parameters"""
     return OllamaLLM(
         model=LLM_MODEL_NAME,
-        temperature=0.1,
-        max_tokens=1024,
-        top_p=0.95,
-        top_k=40,
+        temperature=0.7,
+        max_tokens=500, # Increased for more complex queries
         stop=["###", "```"],  # Stop tokens prevent code block issues
     )

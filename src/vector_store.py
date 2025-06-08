@@ -29,12 +29,17 @@ def add_new_chunks_to_vector_store(new_chunks):
         return load_vector_store()
 
     vectordb = load_vector_store()
-    print("before count...")
     current_count = vectordb.index.ntotal
-    print("after count...")
     print(f"Vector database has {current_count} chunks")
+    
     # Create sequential IDs starting from current count to avoid conflicts
     vectordb.add_documents(new_chunks, ids=[str(current_count + i) for i in range(len(new_chunks))])
+    
+    # Save the updated vector store to disk
+    vectordb.save_local(get_vector_db_path())
+    new_count = vectordb.index.ntotal
+    print(f"Added {len(new_chunks)} new chunks. Vector database now has {new_count} chunks")
+    
     return vectordb
 
 
