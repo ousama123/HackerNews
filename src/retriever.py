@@ -31,4 +31,4 @@ def get_retriever():
         print(f"Built new database with {len(chunks)} chunks")
 
     # Return retriever with optimized k=6 for HackerNews content diversity
-    return vectordb.as_retriever(search_kwargs={"k": 3})
+    return vectordb.as_retriever(search_kwargs={"k": 10})
