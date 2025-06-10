@@ -1,8 +1,3 @@
-"""
-HackerNews Data Transformm
-Extracts, cleans and formats stories, comments and users.
-"""
-
 import html
 import re
 from datetime import datetime
@@ -21,7 +16,7 @@ class Transformer:
         """Extract URLs from text"""
         if not text:
             return []
-        pattern = r"https?://[^\s\]\)<>\"]+"
+        pattern = r"https?://[^\s\]\)(<>\"]+"
         return list(set(re.findall(pattern, text)))
 
     def clean_text(self, text):
@@ -37,12 +32,14 @@ class Transformer:
         if not story:
             return ""
 
+        story_id = story.get("id", "Unknown")
         title = story.get("title", "").strip()
         author = story.get("by", "Unknown")
         score = story.get("score", 0)
         url = story.get("url", "")
         text = self.clean_text(story.get("text", ""))
-        comment_count = len(story.get("kids", []))
+        comment_ids = story.get("kids", [])
+        comment_count = len(comment_ids)
         timestamp = story.get("time", 0)
         date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M") if timestamp else "Unknown"
         hn_category = story.get("hn_category", "topstories")
@@ -59,22 +56,24 @@ class Transformer:
         else:
             story_type, content_category = "Story", "general"
 
-        story_id = story.get("id", "Unknown")
         parts = [
             f"Metadata: type=story, category={content_category}",
             f"Story ID: {story_id}",
             f"Title: {title}",
             f"Description: {story_type}",
             f"Author: {author}",
+            f"Author Profile URL: https://news.ycombinator.com/user?id={author}",
             f"Time: {date}",
             f"Score: {score} points",
             f"Comments: {comment_count} total",
+            f"Comment IDs: {', '.join(str(i) for i in comment_ids)}" if comment_ids else None,
             f"Source Endpoint: {hn_category}",
+            f"Story URL: https://news.ycombinator.com/item?id={story_id}",
         ]
-        if story_id != "Unknown":
-            parts.append(f"Story URL on Hacker News Website: https://news.ycombinator.com/item?id={story_id}")
+        parts = [p for p in parts if p]
+
         if url:
-            parts.append(f"Article: {url}")
+            parts.append(f"Article URL: {url}")
         if text and text not in ["[flagged]", "[dead]"]:
             parts.append(f"Text: {text}")
             urls = [u for u in self.extract_urls_from_text(text) if u != url]
@@ -98,6 +97,7 @@ class Transformer:
         if not comment:
             return ""
 
+        comment_id = comment.get("id", "Unknown")
         author = comment.get("by", "Unknown")
         text = self.clean_text(comment.get("text", ""))
         timestamp = comment.get("time", 0)
@@ -105,21 +105,25 @@ class Transformer:
         hn_category = comment.get("hn_category", "general")
         hn_context = comment.get("hn_context", "comment")
         hn_depth = comment.get("hn_depth", 0)
-        comment_id = comment.get("id", "Unknown")
+        parent = comment.get("parent")
+
+        # Add description field
+        comment_type = "Top-level Comment" if hn_depth == 0 else "Reply"
 
         parts = [
             "Metadata: type=comment, category=discussion",
             f"Comment ID: {comment_id}",
+            f"Description: {comment_type}",
             f"Author: {author}",
+            f"Author Profile URL: https://news.ycombinator.com/user?id={author}",
+            # Relation by ID
+            f"Parent ID: {parent}" if parent else None,
             f"Time: {date}",
             f"Source Category: {hn_category}",
             f"Context: {hn_context}",
             f"Comment Depth: {hn_depth}",
         ]
-        if comment_id != "Unknown":
-            parts.append(f"Comment URL on Hacker News: https://news.ycombinator.com/item?id={comment_id}")
-        if comment.get("parent"):
-            parts.append(f"Replying to: {comment['parent']}")
+        parts = [p for p in parts if p]
 
         if text and text not in ["[flagged]", "[dead]"]:
             parts.append(f"Text: {text}")
@@ -129,9 +133,11 @@ class Transformer:
         else:
             parts.append("Text: [Deleted or empty]")
 
+        # Tags
         tags = [hn_category, "comment"]
         tags.append("top_level_comment" if hn_depth == 0 else "reply")
         parts.append(f"Tags: {', '.join(tags)}")
+
         return "\n".join(parts)
 
     def format_user(self, user):
@@ -146,13 +152,39 @@ class Transformer:
         created_date = datetime.fromtimestamp(created).strftime("%Y-%m-%d") if created else "Unknown"
         hn_context = user.get("hn_context", "user_profile")
 
-        parts = ["Metadata: type=user_profile, category=user_info", f"Username: {username}", f"Karma: {karma} points", f"Member since: {created_date}", f"Context: {hn_context}"]
+        # Add description field
+        if karma > self.HIGH_KARMA_THRESHOLD:
+            user_desc = "High Karma User"
+        elif "author_of" in hn_context:
+            user_desc = "Content Author"
+        elif "commenter" in hn_context:
+            user_desc = "Active Commenter"
+        else:
+            user_desc = "Hacker News User"
+
+        submitted = user.get("submitted", [])
+        preview = submitted[:10]
+        preview_str = ", ".join(str(i) for i in preview) + ("…" if len(submitted) > 10 else "")
+
+        parts = [
+            "Metadata: type=user_profile, category=user_info",
+            f"Username: {username}",
+            f"Description: {user_desc}",
+            f"Profile URL: https://news.ycombinator.com/user?id={username}",
+            f"Karma: {karma} points",
+            f"Member since: {created_date}",
+            f"Context: {hn_context}",
+        ]
         if about:
             parts.append(f"About: {about}")
             urls = self.extract_urls_from_text(about)
             if urls:
                 parts.append(f"Extracted URLs: {', '.join(urls)}")
 
+        if submitted:
+            parts.append(f"Submitted IDs: {preview_str}")
+
+        # Tags
         tags = ["user_profile"]
         if karma > self.HIGH_KARMA_THRESHOLD:
             tags.append("high_karma_user")
@@ -161,44 +193,37 @@ class Transformer:
         if "commenter" in hn_context:
             tags.append("active_commenter")
         parts.append(f"Tags: {', '.join(tags)}")
+
         return "\n".join(parts)
 
+    def format_items_to_documents(self, new_items) -> list[Document]:
+        """
+        Convert raw HackerNews JSON items into langchain Documents.
+        """
+        docs = []
+        for item in new_items:
+            t = item.get("type")
+            if t == "story":
+                text = self.format_story(item)
+            elif t == "comment":
+                text = self.format_comment(item)
+            elif t == "user":
+                text = self.format_user(item)
+            else:
+                continue
 
-    def process_new_items_to_chunks(self, new_items, split_documents_func):
-            """Process new items into document chunks for incremental updates"""
-            print(f"Processing {len(new_items)} new items...")
-            temp_docs = []
+            if not text:
+                continue
 
-            for item in new_items:
-                if not item or not (item_type := item.get("type", "")):
-                    continue
-
-                # Process stories and comments into formatted text documents
-                if item_type == "story" and (doc_text := self.format_story(item)):
-                    temp_docs.append((doc_text, item))
-                elif item_type == "comment" and (doc_text := self.format_comment(item)):
-                    temp_docs.append((doc_text, item))
-                elif item_type == "user" and (doc_text := self.format_user(item)):
-                    temp_docs.append((doc_text, item))
-
-            if not temp_docs:
-                print("No valid documents found in new items")
-                return []
-
-            # Create LangChain Documents with comprehensive metadata for better retrieval
-            documents = [
+            docs.append(
                 Document(
-                    page_content=doc_text,
+                    page_content=text,
                     metadata={
                         "source": "hackernews.com",
-                        "item_id": item.get("id", "unknown"),
-                        "item_type": item.get("type", "unknown"),
+                        "item_id": item.get("id"),
+                        "item_type": t,
                         "author": item.get("by", "unknown"),
                     },
                 )
-                for doc_text, item in temp_docs
-            ]
-
-            chunks = split_documents_func(documents)
-            print(f"Created {len(chunks)} chunks from {len(new_items)} items")
-            return chunks
+            )
+        return docs

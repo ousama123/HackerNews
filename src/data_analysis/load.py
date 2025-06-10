@@ -23,7 +23,8 @@ class Loader:
             output_file = os.path.join(project_root, "src", "data", "hackernews_optimized.txt")
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
-
+        
+        #TODO use format_items_to_documents in Transformer instead
         documents = []
         for item in items:
             if not item:
@@ -59,30 +60,7 @@ class Loader:
 
         print(f"Done! {len(documents)} documents saved to {output_file}")
         return output_file
-
-    def process_hackernews_data(self):
-        """Main function to process raw HN data"""
-        current_file = os.path.abspath(__file__)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-        input_file = os.path.join(project_root, "src", "data", "hackernews_raw.json")
-
-        if not os.path.exists(input_file):
-            print(f"No raw data found at {input_file}")
-            print("Run the fetcher first!")
-            return None
-
-        print("Loading raw HackerNews data...")
-        with open(input_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        items = data.get("items", [])
-        print(f"Found {len(items)} items to process")
-
-        if not items:
-            print("No items found in the data file")
-            return None
-
-        return self.save_preprocessed_data(items)
+    
 
     def append_preprocessed_data(self, items, output_file=None):
         """Append new processed items to existing file"""

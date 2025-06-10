@@ -9,6 +9,7 @@ context.
 
 Guidelines:
 - Keep answers short and focused
+- Use only the information in the context
 - Directly answer the question asked
 - Only include the most relevant information
 - Use bullet points for lists when appropriate

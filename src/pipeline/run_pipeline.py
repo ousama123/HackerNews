@@ -33,9 +33,13 @@ def main():
         # Determine processing strategy: incremental update vs full rebuild
         if os.path.exists(OUTPUT_FILE) and vector_store_exists():
             print("Incremental update - adding to existing data...")
-            loader.append_preprocessed_data(new_items, OUTPUT_FILE)
+            # 1) JSON -> Document
+            new_docs = transformer.format_items_to_documents(new_items)
+            # 2) Append formatted items to .txt export
+            loader.append_preprocessed_data(new_items, OUTPUT_FILE)            
             print("Converting new items to chunks...")
-            new_chunks = transformer.process_new_items_to_chunks(new_items, split_documents)
+            # 3) Document -> embedding-ready chunks
+            new_chunks = split_documents(new_docs)            
             print("Adding new chunks to vector database...")
             add_new_chunks_to_vector_store(new_chunks)
         else:
